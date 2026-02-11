@@ -11,6 +11,7 @@ const DATA_DIR = path.join(ROOT, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const MAX_BODY_BYTES = 1024 * 1024;
 const rateLimiter = new Map();
+const LEAD_STATUSES = new Set(['new', 'qualified', 'contacted', 'proposal_sent', 'won', 'lost']);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -27,14 +28,48 @@ const MIME = {
 async function ensureDb() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DB_FILE)) {
-    const initial = { leads: [], events: [], estimatorSnapshots: [] };
+    const initial = { leads: [], events: [], estimatorSnapshots: [], crmQueue: [] };
     await fsp.writeFile(DB_FILE, JSON.stringify(initial, null, 2));
   }
 }
 
 async function readDb() {
   const raw = await fsp.readFile(DB_FILE, 'utf8');
-  return JSON.parse(raw);
+  const db = JSON.parse(raw);
+  db.crmQueue = Array.isArray(db.crmQueue) ? db.crmQueue : [];
+  db.leads = Array.isArray(db.leads) ? db.leads : [];
+  db.events = Array.isArray(db.events) ? db.events : [];
+  db.estimatorSnapshots = Array.isArray(db.estimatorSnapshots) ? db.estimatorSnapshots : [];
+
+  let changed = false
+  for (const lead of db.leads) {
+    if (!lead.status || !LEAD_STATUSES.has(lead.status)) {
+      lead.status = 'new';
+      changed = true;
+    }
+    if (typeof lead.score !== 'number') {
+      lead.score = 0;
+      changed = true;
+    }
+    if (!lead.grade) {
+      lead.grade = 'C';
+      changed = true;
+    }
+    if (!Array.isArray(lead.scoreReasons)) {
+      lead.scoreReasons = [];
+      changed = true;
+    }
+    if (!lead.updatedAt) {
+      lead.updatedAt = lead.createdAt || new Date().toISOString();
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await writeDb(db);
+  }
+
+  return db;
 }
 
 async function writeDb(next) {
@@ -85,7 +120,7 @@ function parseBody(req) {
     req.on('end', () => {
       try {
         resolve(body ? JSON.parse(body) : {});
-      } catch (error) {
+      } catch {
         reject(new Error('Invalid JSON'));
       }
     });
@@ -101,6 +136,51 @@ function validEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function parseFleetSize(raw) {
+  const numeric = Number(String(raw || '').replace(/[^0-9.]/g, ''));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function scoreLead(lead, estimatorSnapshot) {
+  let score = 0;
+  const reasons = [];
+
+  if (lead.priority === 'Need both acquisition and sell-off') {
+    score += 20;
+    reasons.push('Combined acquisition + divestment priority');
+  } else if (lead.priority === 'Acquire units' || lead.priority === 'Sell off units') {
+    score += 10;
+    reasons.push('Single-track priority selected');
+  }
+
+  const fleet = parseFleetSize(lead.fleetSize);
+  if (fleet >= 150) {
+    score += 15;
+    reasons.push('Fleet size >= 150');
+  } else if (fleet >= 80) {
+    score += 8;
+    reasons.push('Fleet size >= 80');
+  }
+
+  const burden = Number(estimatorSnapshot?.annualBurden || 0);
+  if (burden >= 500000) {
+    score += 20;
+    reasons.push('High annual burden >= $500K');
+  } else if (burden >= 200000) {
+    score += 12;
+    reasons.push('Annual burden >= $200K');
+  }
+
+  const msg = lead.message.toLowerCase();
+  if (msg.includes('urgent') || msg.includes('asap') || msg.includes('immediately')) {
+    score += 6;
+    reasons.push('Urgency signal in message');
+  }
+
+  const grade = score >= 40 ? 'A' : score >= 25 ? 'B' : 'C';
+  return { score, grade, reasons };
+}
+
 function validateLead(payload) {
   const name = normalizeText(payload.name);
   const email = normalizeText(payload.email);
@@ -108,6 +188,7 @@ function validateLead(payload) {
   const priority = normalizeText(payload.priority);
   const message = normalizeText(payload.message);
   const website = normalizeText(payload.website);
+  const sessionId = normalizeText(payload.sessionId) || 'anonymous';
 
   if (website) {
     return { ok: false, status: 400, error: 'Spam detected.' };
@@ -128,8 +209,11 @@ function validateLead(payload) {
       fleetSize,
       priority,
       message,
+      sessionId,
       source: 'website',
+      status: 'new',
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     },
   };
 }
@@ -152,8 +236,48 @@ function validateEvent(payload) {
   };
 }
 
+function dashboardSummary(db) {
+  const statusCounts = {};
+  for (const status of LEAD_STATUSES) {
+    statusCounts[status] = 0;
+  }
+
+  let totalScore = 0;
+  const priorityCounts = {};
+  for (const lead of db.leads) {
+    statusCounts[lead.status] = (statusCounts[lead.status] || 0) + 1;
+    totalScore += Number(lead.score || 0);
+    priorityCounts[lead.priority] = (priorityCounts[lead.priority] || 0) + 1;
+  }
+
+  const avgScore = db.leads.length ? Number((totalScore / db.leads.length).toFixed(2)) : 0;
+  const topPriorities = Object.entries(priorityCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([priority, count]) => ({ priority, count }));
+
+  return {
+    totals: {
+      leads: db.leads.length,
+      events: db.events.length,
+      estimatorSnapshots: db.estimatorSnapshots.length,
+      pendingCrmSync: db.crmQueue.filter((item) => !item.syncedAt).length,
+      avgScore,
+    },
+    statusCounts,
+    topPriorities,
+    recentLeads: db.leads
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 10),
+  };
+}
+
 async function handleApi(req, res) {
-  if (req.method === 'POST' && req.url === '/api/leads') {
+  const fullUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const { pathname } = fullUrl;
+
+  if (req.method === 'POST' && pathname === '/api/leads') {
     if (!checkRateLimit(req, 'leads', 6, 60_000)) {
       return sendJson(res, 429, { error: 'Too many lead submissions. Please try again shortly.' });
     }
@@ -171,13 +295,97 @@ async function handleApi(req, res) {
     }
 
     const db = await readDb();
+    const latestSnapshot = db.estimatorSnapshots
+      .filter((s) => s.sessionId === checked.lead.sessionId)
+      .slice(-1)[0];
+    const scored = scoreLead(checked.lead, latestSnapshot);
+    checked.lead.score = scored.score;
+    checked.lead.grade = scored.grade;
+    checked.lead.scoreReasons = scored.reasons;
+
     db.leads.push(checked.lead);
+    db.crmQueue.push({
+      id: crypto.randomUUID(),
+      leadId: checked.lead.id,
+      createdAt: new Date().toISOString(),
+      syncedAt: null,
+      payload: {
+        name: checked.lead.name,
+        email: checked.lead.email,
+        priority: checked.lead.priority,
+        score: checked.lead.score,
+        grade: checked.lead.grade,
+      },
+    });
     await writeDb(db);
 
-    return sendJson(res, 201, { ok: true, leadId: checked.lead.id });
+    return sendJson(res, 201, { ok: true, leadId: checked.lead.id, score: checked.lead.score, grade: checked.lead.grade });
   }
 
-  if (req.method === 'POST' && req.url === '/api/events') {
+  if (req.method === 'GET' && pathname.startsWith('/api/leads/')) {
+    const id = pathname.replace('/api/leads/', '');
+    const db = await readDb();
+    const lead = db.leads.find((item) => item.id === id);
+    if (!lead) {
+      return sendJson(res, 404, { error: 'Lead not found.' });
+    }
+    return sendJson(res, 200, { lead });
+  }
+
+  if (req.method === 'PATCH' && pathname.startsWith('/api/leads/')) {
+    const parts = pathname.split('/').filter(Boolean);
+    if (parts.length !== 4 || parts[3] !== 'status') {
+      return sendJson(res, 404, { error: 'Not found' });
+    }
+    const id = parts[2];
+
+    let payload;
+    try {
+      payload = await parseBody(req);
+    } catch (error) {
+      return sendJson(res, 400, { error: error.message });
+    }
+
+    const status = normalizeText(payload.status);
+    if (!LEAD_STATUSES.has(status)) {
+      return sendJson(res, 400, { error: 'Invalid status value.' });
+    }
+
+    const db = await readDb();
+    const lead = db.leads.find((item) => item.id === id);
+    if (!lead) {
+      return sendJson(res, 404, { error: 'Lead not found.' });
+    }
+
+    lead.status = status;
+    lead.updatedAt = new Date().toISOString();
+    await writeDb(db);
+
+    return sendJson(res, 200, { ok: true, lead });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/dashboard') {
+    const db = await readDb();
+    return sendJson(res, 200, dashboardSummary(db));
+  }
+
+  if (req.method === 'POST' && pathname === '/api/crm-sync/mock') {
+    const db = await readDb();
+    let synced = 0;
+    const now = new Date().toISOString();
+
+    for (const item of db.crmQueue) {
+      if (!item.syncedAt) {
+        item.syncedAt = now;
+        synced += 1;
+      }
+    }
+
+    await writeDb(db);
+    return sendJson(res, 200, { ok: true, synced });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/events') {
     if (!checkRateLimit(req, 'events', 120, 60_000)) {
       return sendJson(res, 429, { error: 'Too many events.' });
     }
@@ -201,7 +409,7 @@ async function handleApi(req, res) {
     return sendJson(res, 202, { ok: true });
   }
 
-  if (req.method === 'POST' && req.url === '/api/estimator-snapshot') {
+  if (req.method === 'POST' && pathname === '/api/estimator-snapshot') {
     if (!checkRateLimit(req, 'snapshot', 60, 60_000)) {
       return sendJson(res, 429, { error: 'Too many requests.' });
     }
@@ -275,7 +483,7 @@ async function start() {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+        'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       return res.end();

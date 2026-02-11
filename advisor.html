@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fleet Advisory Group | Advisor Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="section">
+      <div class="container">
+        <h1>Advisor Dashboard (Sprint 2)</h1>
+        <p class="section-intro">Pipeline overview, lead quality score, and CRM sync queue status.</p>
+
+        <div class="grid cards-3">
+          <article class="card"><h3>Total Leads</h3><p id="metricLeads">0</p></article>
+          <article class="card"><h3>Average Score</h3><p id="metricScore">0</p></article>
+          <article class="card"><h3>Pending CRM Sync</h3><p id="metricQueue">0</p></article>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <h2>Status Breakdown</h2>
+          <ul id="statusList"></ul>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <h2>Top Priorities</h2>
+          <ul id="priorityList"></ul>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <div class="dashboard-row">
+            <h2>Recent Leads</h2>
+            <button id="syncBtn" class="btn btn-sm" type="button">Run Mock CRM Sync</button>
+          </div>
+          <div class="table-wrap">
+            <table class="lead-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Priority</th>
+                  <th>Score</th>
+                  <th>Grade</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="leadRows"></tbody>
+            </table>
+          </div>
+          <p class="form-note" id="syncNote" aria-live="polite"></p>
+        </div>
+      </div>
+    </main>
+    <script src="advisor.js"></script>
+  </body>
+</html>

@@ -166,3 +166,10 @@ input.invalid, textarea.invalid { border-color: #d03939; background: #fff5f5; }
   .nav.open { display: flex; }
   .sticky-cta { bottom: 0.6rem; }
 }
+
+
+.dashboard-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.table-wrap { overflow-x: auto; }
+.lead-table { width: 100%; border-collapse: collapse; }
+.lead-table th, .lead-table td { text-align: left; padding: 0.55rem; border-bottom: 1px solid var(--border); }
+.lead-table th { color: var(--text-subtle); font-weight: 600; }
