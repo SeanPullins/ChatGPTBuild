@@ -31,6 +31,26 @@ function activeFilters() {
   return { status, grade };
 }
 
+function applyFiltersToUrl() {
+  const filters = activeFilters();
+  const params = new URLSearchParams(window.location.search);
+  if (filters.status) params.set('status', filters.status);
+  else params.delete('status');
+  if (filters.grade) params.set('grade', filters.grade);
+  else params.delete('grade');
+  window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+}
+
+function loadFiltersFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get('status') || '';
+  const grade = params.get('grade') || '';
+  const statusEl = document.getElementById('statusFilter');
+  const gradeEl = document.getElementById('gradeFilter');
+  if (statusEl) statusEl.value = status;
+  if (gradeEl) gradeEl.value = grade;
+}
+
 function withFilters(urlBase) {
   const filters = activeFilters();
   const params = new URLSearchParams();
@@ -50,11 +70,12 @@ function renderList(container, entries, mapper) {
 }
 
 async function loadDashboard() {
-  const [dashboard, funnel] = await Promise.all([
+  const [dashboard, funnel, audit] = await Promise.all([
     getJson(withFilters('/api/dashboard')),
     getJson(withFilters('/api/analytics/funnel')),
+    getJson('/api/audit?limit=15'),
   ]);
-  return { dashboard, funnel };
+  return { dashboard, funnel, audit };
 }
 
 function createStatusSelect(lead) {
@@ -69,19 +90,25 @@ function createStatusSelect(lead) {
   });
 
   select.addEventListener('change', async () => {
-    await getJson(`/api/leads/${lead.id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: select.value }),
-    });
-    await refresh();
+    try {
+      await getJson(`/api/leads/${lead.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: select.value }),
+      });
+      await refresh();
+    } catch (error) {
+      const note = document.getElementById('syncNote');
+      if (note) note.textContent = error.message;
+      await refresh();
+    }
   });
 
   return select;
 }
 
 function renderDashboard(data) {
-  const { dashboard, funnel } = data;
+  const { dashboard, funnel, audit } = data;
   document.getElementById('metricLeads').textContent = String(dashboard.totals.leads);
   document.getElementById('metricScore').textContent = String(dashboard.totals.avgScore);
   document.getElementById('metricQueue').textContent = String(dashboard.totals.pendingCrmSync);
@@ -92,6 +119,9 @@ function renderDashboard(data) {
   const statusEntries = Object.entries(dashboard.statusCounts);
   renderList(document.getElementById('statusList'), statusEntries, ([status, count]) => `${status}: ${count}`);
   renderList(document.getElementById('priorityList'), dashboard.topPriorities, (item) => `${item.priority}: ${item.count}`);
+
+  const auditList = document.getElementById('auditList');
+  renderList(auditList, audit.events, (event) => `${new Date(event.createdAt).toLocaleString()} · ${event.action} · ${event.actor.username || 'system'}`);
 
   const rows = document.getElementById('leadRows');
   rows.innerHTML = '';
@@ -189,16 +219,14 @@ async function renderLeadIntelligence() {
   }
 }
 
-async function loginFlow() {
-  const username = window.prompt('Advisor username', 'advisor');
-  if (!username) return;
-  const password = window.prompt('Advisor password', 'advisor123');
-  if (!password) return;
-
+async function loginFlow(event) {
+  event.preventDefault();
+  const username = document.getElementById('loginUsername')?.value.trim() || '';
+  const password = document.getElementById('loginPassword')?.value.trim() || '';
   const response = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: username.trim(), password: password.trim() }),
+    body: JSON.stringify({ username, password }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.token) {
@@ -218,6 +246,13 @@ async function logoutFlow() {
   localStorage.removeItem(tokenStorage);
 }
 
+function setPreset(status, grade) {
+  const statusEl = document.getElementById('statusFilter');
+  const gradeEl = document.getElementById('gradeFilter');
+  if (statusEl) statusEl.value = status;
+  if (gradeEl) gradeEl.value = grade;
+}
+
 async function refresh() {
   const authState = document.getElementById('authState');
   try {
@@ -235,13 +270,16 @@ async function refresh() {
 
 const syncBtn = document.getElementById('syncBtn');
 const syncNote = document.getElementById('syncNote');
-const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+const presetHotBtn = document.getElementById('presetHotBtn');
+const presetProposalBtn = document.getElementById('presetProposalBtn');
+const presetResetBtn = document.getElementById('presetResetBtn');
+const loginForm = document.getElementById('loginForm');
 
-loginBtn?.addEventListener('click', async () => {
+loginForm?.addEventListener('submit', async (event) => {
   try {
-    await loginFlow();
+    await loginFlow(event);
     await refresh();
   } catch (error) {
     const note = document.getElementById('syncNote');
@@ -256,6 +294,25 @@ logoutBtn?.addEventListener('click', async () => {
 });
 
 applyFiltersBtn?.addEventListener('click', async () => {
+  applyFiltersToUrl();
+  await refresh();
+});
+
+presetHotBtn?.addEventListener('click', async () => {
+  setPreset('new', 'A');
+  applyFiltersToUrl();
+  await refresh();
+});
+
+presetProposalBtn?.addEventListener('click', async () => {
+  setPreset('proposal_sent', '');
+  applyFiltersToUrl();
+  await refresh();
+});
+
+presetResetBtn?.addEventListener('click', async () => {
+  setPreset('', '');
+  applyFiltersToUrl();
   await refresh();
 });
 
@@ -265,11 +322,12 @@ syncBtn?.addEventListener('click', async () => {
     const data = await getJson('/api/crm-sync/mock', { method: 'POST' });
     syncNote.textContent = `Mock CRM sync complete. Synced ${data.synced ?? 0} queued lead(s).`;
     await refresh();
-  } catch {
-    syncNote.textContent = 'Mock CRM sync failed.';
+  } catch (error) {
+    syncNote.textContent = error.message || 'Mock CRM sync failed.';
   } finally {
     syncBtn.disabled = false;
   }
 });
 
+loadFiltersFromUrl();
 refresh();

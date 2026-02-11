@@ -11,6 +11,7 @@ const DATA_DIR = path.join(ROOT, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const MAX_BODY_BYTES = 1024 * 1024;
 const rateLimiter = new Map();
+
 const LEAD_STATUSES = new Set(['new', 'qualified', 'contacted', 'proposal_sent', 'won', 'lost']);
 const ADVISOR_API_KEY = process.env.ADVISOR_API_KEY || 'advisor-dev-key';
 const AUTH_TOKEN_TTL_MS = 1000 * 60 * 60 * 8;
@@ -41,6 +42,7 @@ async function ensureDb() {
       estimatorSnapshots: [],
       crmQueue: [],
       outreachDrafts: [],
+      auditEvents: [],
     };
     await fsp.writeFile(DB_FILE, JSON.stringify(initial, null, 2));
   }
@@ -58,6 +60,7 @@ async function readDb() {
   db.events = Array.isArray(db.events) ? db.events : [];
   db.estimatorSnapshots = Array.isArray(db.estimatorSnapshots) ? db.estimatorSnapshots : [];
   db.outreachDrafts = Array.isArray(db.outreachDrafts) ? db.outreachDrafts : [];
+  db.auditEvents = Array.isArray(db.auditEvents) ? db.auditEvents : [];
 
   let changed = false;
   for (const lead of db.leads) {
@@ -96,64 +99,6 @@ function sendJson(res, statusCode, data) {
     'Cache-Control': 'no-store',
   });
   res.end(JSON.stringify(data));
-}
-
-
-function extractAdvisorKey(req) {
-  const headerKey = req.headers['x-advisor-key'];
-  if (typeof headerKey === 'string' && headerKey.trim()) {
-    return headerKey.trim();
-  }
-  return '';
-}
-
-function extractBearerToken(req) {
-  const authHeader = req.headers.authorization;
-  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    return authHeader.replace('Bearer ', '').trim();
-  }
-  return '';
-}
-
-function createSession(user) {
-  const token = crypto.randomUUID();
-  const now = Date.now();
-  advisorSessions.set(token, {
-    token,
-    userId: user.id,
-    username: user.username,
-    role: user.role,
-    createdAt: now,
-    expiresAt: now + AUTH_TOKEN_TTL_MS,
-  });
-  return token;
-}
-
-function getSession(token) {
-  if (!token) return null;
-  const session = advisorSessions.get(token);
-  if (!session) return null;
-  if (Date.now() > session.expiresAt) {
-    advisorSessions.delete(token);
-    return null;
-  }
-  return session;
-}
-
-function requireAdvisorAuth(req, res) {
-  const providedKey = extractAdvisorKey(req);
-  if (providedKey && providedKey === ADVISOR_API_KEY) {
-    return { ok: true, authType: 'api_key', role: 'admin', username: 'api-key' };
-  }
-
-  const token = extractBearerToken(req);
-  const session = getSession(token);
-  if (session) {
-    return { ok: true, authType: 'session', role: session.role, username: session.username, token };
-  }
-
-  sendJson(res, 401, { error: 'Unauthorized advisor request.' });
-  return { ok: false };
 }
 
 function getIp(req) {
@@ -211,6 +156,78 @@ function validEmail(value) {
 function parseFleetSize(raw) {
   const numeric = Number(String(raw || '').replace(/[^0-9.]/g, ''));
   return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function extractAdvisorKey(req) {
+  const headerKey = req.headers['x-advisor-key'];
+  if (typeof headerKey === 'string' && headerKey.trim()) {
+    return headerKey.trim();
+  }
+  return '';
+}
+
+function extractBearerToken(req) {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    return authHeader.replace('Bearer ', '').trim();
+  }
+  return '';
+}
+
+function createSession(user) {
+  const token = crypto.randomUUID();
+  const now = Date.now();
+  advisorSessions.set(token, {
+    token,
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    createdAt: now,
+    expiresAt: now + AUTH_TOKEN_TTL_MS,
+  });
+  return token;
+}
+
+function getSession(token) {
+  if (!token) return null;
+  const session = advisorSessions.get(token);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    advisorSessions.delete(token);
+    return null;
+  }
+  return session;
+}
+
+function requireAdvisorAuth(req, res) {
+  const providedKey = extractAdvisorKey(req);
+  if (providedKey && providedKey === ADVISOR_API_KEY) {
+    return { ok: true, authType: 'api_key', role: 'admin', username: 'api-key', userId: 'api-key' };
+  }
+
+  const token = extractBearerToken(req);
+  const session = getSession(token);
+  if (session) {
+    return {
+      ok: true,
+      authType: 'session',
+      role: session.role,
+      username: session.username,
+      userId: session.userId,
+      token,
+    };
+  }
+
+  sendJson(res, 401, { error: 'Unauthorized advisor request.' });
+  return { ok: false };
+}
+
+function requireRole(res, auth, roles) {
+  if (!roles.includes(auth.role)) {
+    sendJson(res, 403, { error: 'Insufficient permissions.' });
+    return false;
+  }
+  return true;
 }
 
 function scoreLead(lead, estimatorSnapshot) {
@@ -301,6 +318,18 @@ function createOutreachDraft(lead, recommendation) {
   ].join('\n');
 
   return { subject, body };
+}
+
+function appendAudit(db, actor, action, targetType, targetId, details = {}) {
+  db.auditEvents.push({
+    id: crypto.randomUUID(),
+    actor,
+    action,
+    targetType,
+    targetId,
+    details,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 function validateLead(payload) {
@@ -396,7 +425,6 @@ function dashboardSummary(db) {
   };
 }
 
-
 function funnelAnalytics(db) {
   const counts = {
     new: 0,
@@ -429,6 +457,10 @@ async function handleApi(req, res) {
   const { pathname } = fullUrl;
 
   if (req.method === 'POST' && pathname === '/api/auth/login') {
+    if (!checkRateLimit(req, 'login', 10, 60_000)) {
+      return sendJson(res, 429, { error: 'Too many login attempts.' });
+    }
+
     let payload;
     try {
       payload = await parseBody(req);
@@ -457,7 +489,7 @@ async function handleApi(req, res) {
     if (!auth.ok) return;
     return sendJson(res, 200, {
       ok: true,
-      user: { username: auth.username, role: auth.role, authType: auth.authType },
+      user: { id: auth.userId, username: auth.username, role: auth.role, authType: auth.authType },
     });
   }
 
@@ -507,6 +539,10 @@ async function handleApi(req, res) {
         grade: checked.lead.grade,
       },
     });
+    appendAudit(db, { type: 'system', username: 'public-form' }, 'lead.created', 'lead', checked.lead.id, {
+      priority: checked.lead.priority,
+      grade: checked.lead.grade,
+    });
     await writeDb(db);
 
     return sendJson(res, 201, {
@@ -532,6 +568,7 @@ async function handleApi(req, res) {
   if (req.method === 'PATCH' && pathname.startsWith('/api/leads/')) {
     const auth = requireAdvisorAuth(req, res);
     if (!auth.ok) return;
+
     const parts = pathname.split('/').filter(Boolean);
     if (parts.length !== 4 || parts[3] !== 'status') {
       return sendJson(res, 404, { error: 'Not found' });
@@ -550,14 +587,23 @@ async function handleApi(req, res) {
       return sendJson(res, 400, { error: 'Invalid status value.' });
     }
 
+    if ((status === 'won' || status === 'lost' || status === 'proposal_sent') && !requireRole(res, auth, ['admin'])) {
+      return;
+    }
+
     const db = await readDb();
     const lead = db.leads.find((item) => item.id === id);
     if (!lead) {
       return sendJson(res, 404, { error: 'Lead not found.' });
     }
 
+    const oldStatus = lead.status;
     lead.status = status;
     lead.updatedAt = new Date().toISOString();
+    appendAudit(db, { type: 'user', username: auth.username, role: auth.role }, 'lead.status_changed', 'lead', id, {
+      from: oldStatus,
+      to: status,
+    });
     await writeDb(db);
 
     return sendJson(res, 200, { ok: true, lead });
@@ -623,10 +669,12 @@ async function handleApi(req, res) {
     };
 
     db.outreachDrafts.push(saved);
+    appendAudit(db, { type: 'user', username: auth.username, role: auth.role }, 'outreach.draft_created', 'lead', leadId, {
+      draftId: saved.id,
+    });
     await writeDb(db);
     return sendJson(res, 201, { ok: true, draft: saved });
   }
-
 
   if (req.method === 'GET' && pathname === '/api/analytics/funnel') {
     const auth = requireAdvisorAuth(req, res);
@@ -643,9 +691,23 @@ async function handleApi(req, res) {
     return sendJson(res, 200, funnelAnalytics(filteredDb));
   }
 
+  if (req.method === 'GET' && pathname === '/api/audit') {
+    const auth = requireAdvisorAuth(req, res);
+    if (!auth.ok) return;
+    const limit = Math.min(Number(fullUrl.searchParams.get('limit') || 25), 100);
+    const db = await readDb();
+    const events = db.auditEvents
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, limit);
+    return sendJson(res, 200, { events });
+  }
+
   if (req.method === 'POST' && pathname === '/api/crm-sync/mock') {
     const auth = requireAdvisorAuth(req, res);
     if (!auth.ok) return;
+    if (!requireRole(res, auth, ['admin'])) return;
+
     const db = await readDb();
     let synced = 0;
     const now = new Date().toISOString();
@@ -655,6 +717,7 @@ async function handleApi(req, res) {
         synced += 1;
       }
     }
+    appendAudit(db, { type: 'user', username: auth.username, role: auth.role }, 'crm.sync_mock', 'crmQueue', 'all', { synced });
     await writeDb(db);
     return sendJson(res, 200, { ok: true, synced });
   }
@@ -758,7 +821,7 @@ async function start() {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-advisor-key',
       });
       return res.end();
     }

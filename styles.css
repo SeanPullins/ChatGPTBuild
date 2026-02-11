@@ -181,3 +181,14 @@ input.invalid, textarea.invalid { border-color: #d03939; background: #fff5f5; }
 @media (max-width: 900px) {
   .intel-panel { grid-template-columns: 1fr; }
 }
+
+
+.auth-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+@media (max-width: 900px) {
+  .auth-form { grid-template-columns: 1fr; }
+}
