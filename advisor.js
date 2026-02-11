@@ -1,63 +1,12 @@
 let selectedLeadId = null;
-const tokenStorage = 'advisor_auth_token';
 
-function currentToken() {
-  return localStorage.getItem(tokenStorage) || '';
-}
-
-function authHeaders() {
-  const token = currentToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-async function getJson(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      ...authHeaders(),
-    },
-  });
+async function getJson(url, options) {
+  const response = await fetch(url, options);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(data.error || 'Request failed');
   }
   return data;
-}
-
-function activeFilters() {
-  const status = document.getElementById('statusFilter')?.value || '';
-  const grade = document.getElementById('gradeFilter')?.value || '';
-  return { status, grade };
-}
-
-function applyFiltersToUrl() {
-  const filters = activeFilters();
-  const params = new URLSearchParams(window.location.search);
-  if (filters.status) params.set('status', filters.status);
-  else params.delete('status');
-  if (filters.grade) params.set('grade', filters.grade);
-  else params.delete('grade');
-  window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-}
-
-function loadFiltersFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const status = params.get('status') || '';
-  const grade = params.get('grade') || '';
-  const statusEl = document.getElementById('statusFilter');
-  const gradeEl = document.getElementById('gradeFilter');
-  if (statusEl) statusEl.value = status;
-  if (gradeEl) gradeEl.value = grade;
-}
-
-function withFilters(urlBase) {
-  const filters = activeFilters();
-  const params = new URLSearchParams();
-  if (filters.status) params.set('status', filters.status);
-  if (filters.grade) params.set('grade', filters.grade);
-  const qs = params.toString();
-  return qs ? `${urlBase}?${qs}` : urlBase;
 }
 
 function renderList(container, entries, mapper) {
@@ -70,12 +19,7 @@ function renderList(container, entries, mapper) {
 }
 
 async function loadDashboard() {
-  const [dashboard, funnel, audit] = await Promise.all([
-    getJson(withFilters('/api/dashboard')),
-    getJson(withFilters('/api/analytics/funnel')),
-    getJson('/api/audit?limit=15'),
-  ]);
-  return { dashboard, funnel, audit };
+  return getJson('/api/dashboard');
 }
 
 function createStatusSelect(lead) {
@@ -90,44 +34,32 @@ function createStatusSelect(lead) {
   });
 
   select.addEventListener('change', async () => {
-    try {
-      await getJson(`/api/leads/${lead.id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: select.value }),
-      });
-      await refresh();
-    } catch (error) {
-      const note = document.getElementById('syncNote');
-      if (note) note.textContent = error.message;
-      await refresh();
-    }
+    await getJson(`/api/leads/${lead.id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: select.value }),
+    });
+    await refresh();
   });
 
   return select;
 }
 
 function renderDashboard(data) {
-  const { dashboard, funnel, audit } = data;
-  document.getElementById('metricLeads').textContent = String(dashboard.totals.leads);
-  document.getElementById('metricScore').textContent = String(dashboard.totals.avgScore);
-  document.getElementById('metricQueue').textContent = String(dashboard.totals.pendingCrmSync);
-  document.getElementById('metricQualifiedRate').textContent = `${funnel.rates.qualifiedRate}%`;
-  document.getElementById('metricProposalRate').textContent = `${funnel.rates.proposalRate}%`;
-  document.getElementById('metricWinRate').textContent = `${funnel.rates.winRate}%`;
+  document.getElementById('metricLeads').textContent = String(data.totals.leads);
+  document.getElementById('metricScore').textContent = String(data.totals.avgScore);
+  document.getElementById('metricQueue').textContent = String(data.totals.pendingCrmSync);
 
-  const statusEntries = Object.entries(dashboard.statusCounts);
+  const statusEntries = Object.entries(data.statusCounts);
   renderList(document.getElementById('statusList'), statusEntries, ([status, count]) => `${status}: ${count}`);
-  renderList(document.getElementById('priorityList'), dashboard.topPriorities, (item) => `${item.priority}: ${item.count}`);
-
-  const auditList = document.getElementById('auditList');
-  renderList(auditList, audit.events, (event) => `${new Date(event.createdAt).toLocaleString()} · ${event.action} · ${event.actor.username || 'system'}`);
+  renderList(document.getElementById('priorityList'), data.topPriorities, (item) => `${item.priority}: ${item.count}`);
 
   const rows = document.getElementById('leadRows');
   rows.innerHTML = '';
 
-  dashboard.recentLeads.forEach((lead) => {
+  data.recentLeads.forEach((lead) => {
     const tr = document.createElement('tr');
+
     const actionBtn = document.createElement('button');
     actionBtn.className = 'btn btn-sm';
     actionBtn.textContent = 'View';
@@ -175,9 +107,6 @@ async function renderLeadIntelligence() {
       <div class="intel-block">
         <h3>Outreach Draft</h3>
         <p class="note" id="draftNote">No draft generated yet.</p>
-        <div class="dashboard-row" style="margin-bottom: 0.5rem;">
-          <button id="copyDraftBtn" class="btn btn-secondary btn-sm" type="button">Copy Draft</button>
-        </div>
         <pre id="draftOutput" class="draft-output"></pre>
       </div>
     `;
@@ -192,7 +121,6 @@ async function renderLeadIntelligence() {
     const draftBtn = panel.querySelector('#draftBtn');
     const draftOutput = panel.querySelector('#draftOutput');
     const draftNote = panel.querySelector('#draftNote');
-    const copyDraftBtn = panel.querySelector('#copyDraftBtn');
 
     draftBtn.addEventListener('click', async () => {
       const draftData = await getJson('/api/outreach/draft', {
@@ -204,130 +132,38 @@ async function renderLeadIntelligence() {
       draftNote.textContent = `Draft created at ${new Date(draftData.draft.createdAt).toLocaleString()}`;
       draftOutput.textContent = `Subject: ${draftData.draft.subject}\n\n${draftData.draft.body}`;
     });
-
-    copyDraftBtn.addEventListener('click', async () => {
-      const text = draftOutput.textContent.trim();
-      if (!text) {
-        draftNote.textContent = 'Generate a draft first before copying.';
-        return;
-      }
-      await navigator.clipboard.writeText(text);
-      draftNote.textContent = 'Draft copied to clipboard.';
-    });
   } catch (error) {
     panel.innerHTML = `<p class="note">Unable to load intelligence: ${error.message}</p>`;
   }
 }
 
-async function loginFlow(event) {
-  event.preventDefault();
-  const username = document.getElementById('loginUsername')?.value.trim() || '';
-  const password = document.getElementById('loginPassword')?.value.trim() || '';
-  const response = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.token) {
-    throw new Error(data.error || 'Login failed');
-  }
-  localStorage.setItem(tokenStorage, data.token);
-}
-
-async function logoutFlow() {
-  const token = currentToken();
-  if (token) {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {});
-  }
-  localStorage.removeItem(tokenStorage);
-}
-
-function setPreset(status, grade) {
-  const statusEl = document.getElementById('statusFilter');
-  const gradeEl = document.getElementById('gradeFilter');
-  if (statusEl) statusEl.value = status;
-  if (gradeEl) gradeEl.value = grade;
-}
-
 async function refresh() {
-  const authState = document.getElementById('authState');
   try {
-    const me = await getJson('/api/auth/me');
-    authState.textContent = `Signed in as ${me.user.username} (${me.user.role}).`;
     const data = await loadDashboard();
     renderDashboard(data);
     await renderLeadIntelligence();
   } catch {
-    authState.textContent = 'Not signed in.';
     const note = document.getElementById('syncNote');
-    if (note) note.textContent = 'Please sign in to load advisor data.';
+    note.textContent = 'Unable to load dashboard data.';
   }
 }
 
 const syncBtn = document.getElementById('syncBtn');
 const syncNote = document.getElementById('syncNote');
-const logoutBtn = document.getElementById('logoutBtn');
-const applyFiltersBtn = document.getElementById('applyFiltersBtn');
-const presetHotBtn = document.getElementById('presetHotBtn');
-const presetProposalBtn = document.getElementById('presetProposalBtn');
-const presetResetBtn = document.getElementById('presetResetBtn');
-const loginForm = document.getElementById('loginForm');
 
-loginForm?.addEventListener('submit', async (event) => {
-  try {
-    await loginFlow(event);
-    await refresh();
-  } catch (error) {
-    const note = document.getElementById('syncNote');
-    if (note) note.textContent = error.message;
-  }
-});
+if (syncBtn) {
+  syncBtn.addEventListener('click', async () => {
+    syncBtn.disabled = true;
+    try {
+      const data = await getJson('/api/crm-sync/mock', { method: 'POST' });
+      syncNote.textContent = `Mock CRM sync complete. Synced ${data.synced ?? 0} queued lead(s).`;
+      await refresh();
+    } catch {
+      syncNote.textContent = 'Mock CRM sync failed.';
+    } finally {
+      syncBtn.disabled = false;
+    }
+  });
+}
 
-logoutBtn?.addEventListener('click', async () => {
-  await logoutFlow();
-  selectedLeadId = null;
-  await refresh();
-});
-
-applyFiltersBtn?.addEventListener('click', async () => {
-  applyFiltersToUrl();
-  await refresh();
-});
-
-presetHotBtn?.addEventListener('click', async () => {
-  setPreset('new', 'A');
-  applyFiltersToUrl();
-  await refresh();
-});
-
-presetProposalBtn?.addEventListener('click', async () => {
-  setPreset('proposal_sent', '');
-  applyFiltersToUrl();
-  await refresh();
-});
-
-presetResetBtn?.addEventListener('click', async () => {
-  setPreset('', '');
-  applyFiltersToUrl();
-  await refresh();
-});
-
-syncBtn?.addEventListener('click', async () => {
-  syncBtn.disabled = true;
-  try {
-    const data = await getJson('/api/crm-sync/mock', { method: 'POST' });
-    syncNote.textContent = `Mock CRM sync complete. Synced ${data.synced ?? 0} queued lead(s).`;
-    await refresh();
-  } catch (error) {
-    syncNote.textContent = error.message || 'Mock CRM sync failed.';
-  } finally {
-    syncBtn.disabled = false;
-  }
-});
-
-loadFiltersFromUrl();
 refresh();

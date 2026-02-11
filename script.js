@@ -272,9 +272,22 @@ if (emailDraftBtn && form) {
     const priority = form.querySelector('select[name="priority"]')?.value || 'Fleet review';
     const fleetSize = form.querySelector('input[name="fleetSize"]')?.value.trim() || 'Not specified';
     const subject = encodeURIComponent(`Fleet Consulting Inquiry: ${priority}`);
-    const body = encodeURIComponent(`Hello Oakleaf Auto Consulting,%0D%0A%0D%0AName: ${name}%0D%0AFleet size: ${fleetSize}%0D%0APriority: ${priority}%0D%0A%0D%0AI would like to discuss next steps.%0D%0A`);
+    const body = encodeURIComponent(`Hello Fleet Advisory Group,%0D%0A%0D%0AName: ${name}%0D%0AFleet size: ${fleetSize}%0D%0APriority: ${priority}%0D%0A%0D%0AI would like to discuss next steps.%0D%0A`);
     trackEvent('email_draft_opened', { priority });
-    window.location.href = `mailto:consulting@oakleafautoconsulting.com?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:consulting@fleetadvisorygroup.com?subject=${subject}&body=${body}`;
+  });
+}
+
+const form = document.querySelector('.contact-form');
+const formNote = document.querySelector('.form-note');
+
+if (form && formNote) {
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const name = data.get('name')?.toString().trim() || 'there';
+    formNote.textContent = `Thanks, ${name}. We received your request and will reach out shortly.`;
+    form.reset();
   });
 }
 
