@@ -9,8 +9,8 @@
   <body>
     <main class="section">
       <div class="container">
-        <h1>Advisor Dashboard (Sprint 2)</h1>
-        <p class="section-intro">Pipeline overview, lead quality score, and CRM sync queue status.</p>
+        <h1>Advisor Dashboard (Sprint 3)</h1>
+        <p class="section-intro">Pipeline overview, lead quality insights, recommendations, and outreach drafting.</p>
 
         <div class="grid cards-3">
           <article class="card"><h3>Total Leads</h3><p id="metricLeads">0</p></article>
@@ -43,12 +43,21 @@
                   <th>Score</th>
                   <th>Grade</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="leadRows"></tbody>
             </table>
           </div>
           <p class="form-note" id="syncNote" aria-live="polite"></p>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <h2>Lead Intelligence Panel</h2>
+          <p class="section-intro">Select a lead to view recommendations and generate outreach drafts.</p>
+          <div id="intelPanel" class="intel-panel">
+            <p class="note">No lead selected.</p>
+          </div>
         </div>
       </div>
     </main>

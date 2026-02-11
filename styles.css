@@ -173,3 +173,11 @@ input.invalid, textarea.invalid { border-color: #d03939; background: #fff5f5; }
 .lead-table { width: 100%; border-collapse: collapse; }
 .lead-table th, .lead-table td { text-align: left; padding: 0.55rem; border-bottom: 1px solid var(--border); }
 .lead-table th { color: var(--text-subtle); font-weight: 600; }
+
+
+.intel-panel { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0,1fr)); }
+.intel-block { border: 1px solid var(--border); border-radius: 0.7rem; padding: 0.8rem; background: #fff; }
+.draft-output { white-space: pre-wrap; background: #f8fbff; border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.6rem; min-height: 7rem; }
+@media (max-width: 900px) {
+  .intel-panel { grid-template-columns: 1fr; }
+}

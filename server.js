@@ -28,9 +28,19 @@ const MIME = {
 async function ensureDb() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DB_FILE)) {
-    const initial = { leads: [], events: [], estimatorSnapshots: [], crmQueue: [] };
+    const initial = {
+      leads: [],
+      events: [],
+      estimatorSnapshots: [],
+      crmQueue: [],
+      outreachDrafts: [],
+    };
     await fsp.writeFile(DB_FILE, JSON.stringify(initial, null, 2));
   }
+}
+
+async function writeDb(next) {
+  await fsp.writeFile(DB_FILE, JSON.stringify(next, null, 2));
 }
 
 async function readDb() {
@@ -40,8 +50,9 @@ async function readDb() {
   db.leads = Array.isArray(db.leads) ? db.leads : [];
   db.events = Array.isArray(db.events) ? db.events : [];
   db.estimatorSnapshots = Array.isArray(db.estimatorSnapshots) ? db.estimatorSnapshots : [];
+  db.outreachDrafts = Array.isArray(db.outreachDrafts) ? db.outreachDrafts : [];
 
-  let changed = false
+  let changed = false;
   for (const lead of db.leads) {
     if (!lead.status || !LEAD_STATUSES.has(lead.status)) {
       lead.status = 'new';
@@ -70,10 +81,6 @@ async function readDb() {
   }
 
   return db;
-}
-
-async function writeDb(next) {
-  await fsp.writeFile(DB_FILE, JSON.stringify(next, null, 2));
 }
 
 function sendJson(res, statusCode, data) {
@@ -181,6 +188,56 @@ function scoreLead(lead, estimatorSnapshot) {
   return { score, grade, reasons };
 }
 
+function recommendationForLead(lead) {
+  const recommendations = [];
+  if (lead.priority === 'Need both acquisition and sell-off') {
+    recommendations.push('Run a combined keep/replace/divest workshop in week 1.');
+    recommendations.push('Build a phased acquisition + liquidation schedule over 90 days.');
+  }
+  if (lead.priority === 'Acquire units') {
+    recommendations.push('Prioritize specification alignment and total-cost vendor shortlist.');
+  }
+  if (lead.priority === 'Sell off units') {
+    recommendations.push('Start with high-carry-cost and low-utilization units for sell-off.');
+  }
+
+  const fleet = parseFleetSize(lead.fleetSize);
+  if (fleet >= 150) {
+    recommendations.push('Create region-based fleet segmentation to speed decision cycles.');
+  }
+
+  if (lead.grade === 'A') {
+    recommendations.push('Route to senior advisor and schedule discovery call within 24 hours.');
+  } else if (lead.grade === 'B') {
+    recommendations.push('Schedule advisor call within 72 hours and send pre-call questionnaire.');
+  } else {
+    recommendations.push('Assign nurture sequence with estimator follow-up and case examples.');
+  }
+
+  const nextBestAction = lead.grade === 'A' ? 'Immediate senior discovery call' : 'Advisor qualification call';
+  return { nextBestAction, recommendations };
+}
+
+function createOutreachDraft(lead, recommendation) {
+  const subject = `Fleet Strategy Next Steps for ${lead.name}`;
+  const body = [
+    `Hi ${lead.name},`,
+    '',
+    'Thanks for reaching out regarding your fleet strategy priorities.',
+    `Based on your request (${lead.priority}) and profile, our suggested first move is: ${recommendation.nextBestAction}.`,
+    '',
+    'Proposed immediate focus areas:',
+    ...recommendation.recommendations.map((item, idx) => `${idx + 1}. ${item}`),
+    '',
+    'Would you be available for a 30-minute strategy call this week?',
+    '',
+    'Best,',
+    'Fleet Advisory Group',
+  ].join('\n');
+
+  return { subject, body };
+}
+
 function validateLead(payload) {
   const name = normalizeText(payload.name);
   const email = normalizeText(payload.email);
@@ -262,6 +319,7 @@ function dashboardSummary(db) {
       events: db.events.length,
       estimatorSnapshots: db.estimatorSnapshots.length,
       pendingCrmSync: db.crmQueue.filter((item) => !item.syncedAt).length,
+      outreachDrafts: db.outreachDrafts.length,
       avgScore,
     },
     statusCounts,
@@ -269,7 +327,7 @@ function dashboardSummary(db) {
     recentLeads: db.leads
       .slice()
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 10),
+      .slice(0, 12),
   };
 }
 
@@ -295,9 +353,7 @@ async function handleApi(req, res) {
     }
 
     const db = await readDb();
-    const latestSnapshot = db.estimatorSnapshots
-      .filter((s) => s.sessionId === checked.lead.sessionId)
-      .slice(-1)[0];
+    const latestSnapshot = db.estimatorSnapshots.filter((s) => s.sessionId === checked.lead.sessionId).slice(-1)[0];
     const scored = scoreLead(checked.lead, latestSnapshot);
     checked.lead.score = scored.score;
     checked.lead.grade = scored.grade;
@@ -319,7 +375,12 @@ async function handleApi(req, res) {
     });
     await writeDb(db);
 
-    return sendJson(res, 201, { ok: true, leadId: checked.lead.id, score: checked.lead.score, grade: checked.lead.grade });
+    return sendJson(res, 201, {
+      ok: true,
+      leadId: checked.lead.id,
+      score: checked.lead.score,
+      grade: checked.lead.grade,
+    });
   }
 
   if (req.method === 'GET' && pathname.startsWith('/api/leads/')) {
@@ -337,8 +398,8 @@ async function handleApi(req, res) {
     if (parts.length !== 4 || parts[3] !== 'status') {
       return sendJson(res, 404, { error: 'Not found' });
     }
-    const id = parts[2];
 
+    const id = parts[2];
     let payload;
     try {
       payload = await parseBody(req);
@@ -369,18 +430,61 @@ async function handleApi(req, res) {
     return sendJson(res, 200, dashboardSummary(db));
   }
 
+  if (req.method === 'GET' && pathname.startsWith('/api/recommendations/')) {
+    const leadId = pathname.replace('/api/recommendations/', '');
+    const db = await readDb();
+    const lead = db.leads.find((item) => item.id === leadId);
+    if (!lead) {
+      return sendJson(res, 404, { error: 'Lead not found.' });
+    }
+    const recommendation = recommendationForLead(lead);
+    return sendJson(res, 200, { leadId, recommendation });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/outreach/draft') {
+    let payload;
+    try {
+      payload = await parseBody(req);
+    } catch (error) {
+      return sendJson(res, 400, { error: error.message });
+    }
+
+    const leadId = normalizeText(payload.leadId);
+    if (!leadId) {
+      return sendJson(res, 400, { error: 'leadId is required' });
+    }
+
+    const db = await readDb();
+    const lead = db.leads.find((item) => item.id === leadId);
+    if (!lead) {
+      return sendJson(res, 404, { error: 'Lead not found.' });
+    }
+
+    const recommendation = recommendationForLead(lead);
+    const draft = createOutreachDraft(lead, recommendation);
+    const saved = {
+      id: crypto.randomUUID(),
+      leadId,
+      subject: draft.subject,
+      body: draft.body,
+      createdAt: new Date().toISOString(),
+    };
+
+    db.outreachDrafts.push(saved);
+    await writeDb(db);
+    return sendJson(res, 201, { ok: true, draft: saved });
+  }
+
   if (req.method === 'POST' && pathname === '/api/crm-sync/mock') {
     const db = await readDb();
     let synced = 0;
     const now = new Date().toISOString();
-
     for (const item of db.crmQueue) {
       if (!item.syncedAt) {
         item.syncedAt = now;
         synced += 1;
       }
     }
-
     await writeDb(db);
     return sendJson(res, 200, { ok: true, synced });
   }
@@ -436,7 +540,7 @@ async function handleApi(req, res) {
     return sendJson(res, 202, { ok: true });
   }
 
-  sendJson(res, 404, { error: 'Not found' });
+  return sendJson(res, 404, { error: 'Not found' });
 }
 
 function safePath(urlPath) {
