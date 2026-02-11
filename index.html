@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fleet Advisory Group | Fleet Acquisition & Divestment Consulting</title>
+    <meta
+      name="description"
+      content="We help businesses assess fleet performance, acquire the right units, and sell off underutilized assets with confidence."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="container nav-wrap">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">🚚</span>
+          <span class="brand-text">Fleet Advisory Group</span>
+        </div>
+        <button class="menu-toggle" aria-expanded="false" aria-controls="primary-nav">
+          Menu
+        </button>
+        <nav id="primary-nav" class="nav" aria-label="Primary">
+          <a href="#services">Services</a>
+          <a href="#process">Process</a>
+          <a href="#results">Results</a>
+          <a href="#contact" class="btn btn-sm">Book a Review</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="container hero-grid">
+          <div>
+            <p class="eyebrow">Fleet Consulting for Growing Businesses</p>
+            <h1>Review your fleet. Buy smarter. Sell surplus units strategically.</h1>
+            <p class="lead">
+              We help operations leaders reduce waste, improve utilization, and align fleet assets with business goals—whether you're acquiring new units, selling off old ones, or both.
+            </p>
+            <div class="hero-actions">
+              <a href="#contact" class="btn">Schedule a Fleet Assessment</a>
+              <a href="#services" class="btn btn-secondary">Explore Services</a>
+            </div>
+            <ul class="hero-highlights" aria-label="Quick value points">
+              <li>Data-backed fleet utilization review</li>
+              <li>Acquisition planning and sourcing support</li>
+              <li>Divestment strategy for underused units</li>
+            </ul>
+          </div>
+          <aside class="card stat-card" aria-label="Key outcomes">
+            <h2>Typical Client Outcomes</h2>
+            <ul>
+              <li><strong>12–25%</strong> lower idle asset burden</li>
+              <li><strong>8–18%</strong> reduction in acquisition overspend</li>
+              <li><strong>Faster</strong> turn-around on unit liquidation</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <section id="services" class="section">
+        <div class="container">
+          <h2>Consulting Services</h2>
+          <p class="section-intro">
+            Practical guidance tailored to your operations, budget, and growth plans.
+          </p>
+          <div class="grid cards-3">
+            <article class="card">
+              <h3>Fleet Portfolio Review</h3>
+              <p>
+                We audit usage, maintenance trends, lifecycle costs, and downtime to identify which assets to keep, replace, or retire.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Acquisition Advisory</h3>
+              <p>
+                From requirements planning to vendor comparison, we help you secure the right units at the right total cost.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Divestment Strategy</h3>
+              <p>
+                We build a sell-off roadmap, prioritize units by value and timing, and support remarketing strategy to maximize recovery.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="process" class="section section-alt">
+        <div class="container">
+          <h2>How We Work</h2>
+          <ol class="process-list">
+            <li><strong>Discover:</strong> Understand your fleet objectives and operational constraints.</li>
+            <li><strong>Diagnose:</strong> Analyze cost, utilization, and asset performance data.</li>
+            <li><strong>Design:</strong> Create a right-sized acquisition and divestment plan.</li>
+            <li><strong>Deliver:</strong> Support execution with clear milestones and accountability.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="results" class="section">
+        <div class="container">
+          <h2>Built for Decision-Makers</h2>
+          <div class="grid cards-2">
+            <article class="card">
+              <h3>For Operations Leaders</h3>
+              <p>
+                Improve unit availability and service reliability without over-investing in unnecessary assets.
+              </p>
+            </article>
+            <article class="card">
+              <h3>For Finance Teams</h3>
+              <p>
+                Strengthen capital planning with clearer ROI scenarios for replacements, acquisitions, and sell-offs.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" class="section cta">
+        <div class="container cta-wrap">
+          <div>
+            <h2>Ready for a Fleet Strategy Review?</h2>
+            <p>
+              Tell us about your current fleet and goals. We'll follow up with a focused consultation plan.
+            </p>
+          </div>
+          <form class="contact-form" aria-label="Contact form">
+            <label>
+              Name
+              <input type="text" name="name" placeholder="Your name" required />
+            </label>
+            <label>
+              Work email
+              <input type="email" name="email" placeholder="you@company.com" required />
+            </label>
+            <label>
+              Fleet size
+              <input type="text" name="fleetSize" placeholder="e.g. 85 units" />
+            </label>
+            <label>
+              What do you need help with?
+              <textarea name="message" rows="4" placeholder="Acquisition planning, unit sell-off, utilization review..."></textarea>
+            </label>
+            <button type="submit" class="btn">Request Consultation</button>
+            <p class="form-note" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-wrap">
+        <p>© <span id="year"></span> Fleet Advisory Group</p>
+        <a href="#main">Back to top</a>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
