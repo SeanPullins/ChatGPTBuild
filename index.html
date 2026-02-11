@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fleet Advisory Group | Fleet Acquisition & Divestment Consulting</title>
+    <meta
+      name="description"
+      content="We help businesses assess fleet performance, acquire the right units, and sell off underutilized assets with confidence."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="progress-bar" aria-hidden="true"><span id="scrollProgress"></span></div>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="container nav-wrap">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">🚚</span>
+          <span class="brand-text">Fleet Advisory Group</span>
+        </div>
+        <button class="menu-toggle" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+        <nav id="primary-nav" class="nav" aria-label="Primary">
+          <a href="#services">Services</a>
+          <a href="#estimator">Estimator</a>
+          <a href="#simulator">Simulator</a>
+          <a href="#stories">Stories</a>
+          <a href="#faq">FAQ</a>
+          <a href="#contact" class="btn btn-sm">Book a Review</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="container hero-grid">
+          <div>
+            <p class="eyebrow">Fleet Consulting for Growth-Minded Businesses</p>
+            <h1>Review your fleet. Buy smarter. Sell surplus units strategically.</h1>
+            <p class="lead">
+              We help operations and finance teams reduce idle assets, improve utilization, and align acquisition + sell-off decisions with real business goals.
+            </p>
+            <div class="hero-actions">
+              <a href="#contact" class="btn">Schedule a Fleet Assessment</a>
+              <a href="#services" class="btn btn-secondary">See Services</a>
+            </div>
+            <div class="quick-actions" aria-label="Quick service selection">
+              <button class="chip" type="button" data-intent="Fleet portfolio review and optimization">Review Existing Fleet</button>
+              <button class="chip" type="button" data-intent="Acquisition planning for replacement or expansion units">Acquire Units</button>
+              <button class="chip" type="button" data-intent="Divestment strategy to sell surplus or aging units">Sell Off Units</button>
+            </div>
+            <div class="trust-row" aria-label="Trust signals">
+              <p>✔ Confidential advisory process</p>
+              <p>✔ Leadership-ready decision briefs</p>
+              <p>✔ Flexible engagement models</p>
+            </div>
+          </div>
+          <aside class="card stat-card" aria-label="Key outcomes">
+            <h2>Typical Client Outcomes</h2>
+            <ul>
+              <li><strong>12–25%</strong> lower idle asset burden</li>
+              <li><strong>8–18%</strong> reduction in acquisition overspend</li>
+              <li><strong>Faster</strong> turn-around on unit liquidation</li>
+            </ul>
+            <p class="note">Directional performance ranges based on historical project outcomes.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="services" class="section">
+        <div class="container">
+          <h2>Consulting Services</h2>
+          <p class="section-intro">Choose one service or combine them into a full fleet transition program.</p>
+          <div class="grid cards-3">
+            <article class="card card-hover">
+              <h3>Fleet Portfolio Review</h3>
+              <p>Audit utilization, maintenance, downtime, lifecycle cost, and replacement risk to identify what to keep, refresh, or retire.</p>
+            </article>
+            <article class="card card-hover">
+              <h3>Acquisition Advisory</h3>
+              <p>Translate operational requirements into clear specs, vendor shortlists, and total-cost comparisons before you buy.</p>
+            </article>
+            <article class="card card-hover">
+              <h3>Divestment Strategy</h3>
+              <p>Prioritize which units to sell first, align timing to market demand, and improve value recovery through a structured sell-off plan.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="estimator" class="section section-alt">
+        <div class="container estimator-wrap">
+          <div>
+            <h2>Quick Opportunity Estimator</h2>
+            <p class="section-intro">Estimate annual optimization potential from underutilized units.</p>
+            <div class="range-row">
+              <label for="fleetUnits">Fleet size (units)</label>
+              <output id="fleetUnitsLabel" for="fleetUnits">120</output>
+            </div>
+            <input id="fleetUnits" type="range" min="10" max="500" value="120" />
+
+            <div class="range-row">
+              <label for="idleShare">Estimated idle/underused share (%)</label>
+              <output id="idleShareLabel" for="idleShare">18%</output>
+            </div>
+            <input id="idleShare" type="range" min="5" max="45" value="18" />
+
+            <div class="range-row">
+              <label for="carryingCost">Avg monthly carrying cost per unit ($)</label>
+              <output id="carryingCostLabel" for="carryingCost">$1,200</output>
+            </div>
+            <input id="carryingCost" type="range" min="400" max="3000" step="50" value="1200" />
+          </div>
+          <aside class="card estimator-card" aria-live="polite">
+            <h3>Your Snapshot</h3>
+            <p><strong>Fleet size:</strong> <span id="fleetUnitsOut">120</span> units</p>
+            <p><strong>Underused units:</strong> <span id="idleUnitsOut">22</span></p>
+            <p><strong>Potential annual burden:</strong> <span id="annualBurdenOut">$316,800</span></p>
+            <p><strong>Estimated optimization target:</strong> <span id="targetReductionOut">$63,360</span></p>
+            <div id="savingsBadge" class="savings-badge" role="status" aria-live="polite"></div>
+            <p class="note">Directional only. We refine this during your detailed fleet review.</p>
+            <a href="#contact" class="btn btn-block">Discuss My Fleet Numbers</a>
+          </aside>
+        </div>
+      </section>
+
+      <section id="process" class="section">
+        <div class="container">
+          <h2>How We Work</h2>
+          <ol class="process-list">
+            <li><strong>Discover:</strong> Capture goals, constraints, and decision deadlines.</li>
+            <li><strong>Diagnose:</strong> Analyze utilization, cost-to-own, and replacement timing.</li>
+            <li><strong>Design:</strong> Build acquisition and/or sell-off roadmap with clear milestones.</li>
+            <li><strong>Deliver:</strong> Support execution with leadership-ready recommendations.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="simulator" class="section section-alt">
+        <div class="container">
+          <h2>Scenario Simulator</h2>
+          <p class="section-intro">Switch views to compare a typical “before” state with a guided optimization “after” state.</p>
+          <div class="scenario-controls" role="tablist" aria-label="Scenario tabs">
+            <button class="tab-btn active" type="button" role="tab" aria-selected="true" aria-controls="beforePanel" id="beforeTab" data-scenario="before">Before Optimization</button>
+            <button class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="afterPanel" id="afterTab" data-scenario="after">After Strategy Rollout</button>
+          </div>
+          <div class="scenario-panels">
+            <article class="card scenario-panel active" id="beforePanel" role="tabpanel" aria-labelledby="beforeTab">
+              <h3>Common Pre-Review State</h3>
+              <ul>
+                <li>Unclear replacement priorities and mixed fleet age profiles</li>
+                <li>Idle assets consuming budget without clear ROI</li>
+                <li>Reactive disposal decisions with lower recovery value</li>
+              </ul>
+            </article>
+            <article class="card scenario-panel" id="afterPanel" role="tabpanel" aria-labelledby="afterTab" hidden>
+              <h3>Post-Review Target State</h3>
+              <ul>
+                <li>Tiered keep/replace/divest roadmap by unit category</li>
+                <li>Acquisition decisions linked to utilization and margin goals</li>
+                <li>Sell-off sequence aligned to market timing and cash strategy</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="roiTitle">
+        <div class="container roi-panel" id="roiTitle">
+          <h2>What You Receive in a Fleet Review</h2>
+          <ul class="check-grid">
+            <li>Asset utilization segmentation</li>
+            <li>Replace/retain/divest recommendations</li>
+            <li>Acquisition timing and vendor strategy</li>
+            <li>Sell-off sequencing and recovery targets</li>
+            <li>Leadership-ready action summary</li>
+            <li>90-day decision roadmap</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="stories" class="section section-alt">
+        <div class="container">
+          <h2>Client Snapshot Stories</h2>
+          <div class="stories-shell card" aria-live="polite">
+            <blockquote id="storyQuote">“We cut idle units by 17% in two quarters and redirected capital into better-fit equipment.”</blockquote>
+            <p id="storyMeta"><strong>Regional Service Fleet</strong> · 140 units</p>
+            <div class="stories-controls">
+              <button type="button" id="prevStory" class="chip">Previous</button>
+              <button type="button" id="nextStory" class="chip">Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" class="section">
+        <div class="container">
+          <h2>Frequently Asked Questions</h2>
+          <div class="faq-list">
+            <details>
+              <summary>Can you help if we only need acquisition support?</summary>
+              <p>Yes. Many clients start with acquisition advisory only, then expand into portfolio review or divestment as priorities shift.</p>
+            </details>
+            <details>
+              <summary>Can you help us sell older units faster?</summary>
+              <p>Yes. We develop a unit-by-unit divestment sequence, timing strategy, and channel guidance to improve speed and recovery value.</p>
+            </details>
+            <details>
+              <summary>What data do you need to get started?</summary>
+              <p>A basic fleet inventory, rough utilization patterns, and operating costs are enough for an initial review.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" class="section cta">
+        <div class="container cta-wrap">
+          <div>
+            <h2>Ready for a Fleet Strategy Review?</h2>
+            <p>Share your current fleet situation and we’ll recommend the right next step: review, acquisition support, sell-off strategy, or a combined engagement.</p>
+          </div>
+          <form class="contact-form" aria-label="Contact form" novalidate>
+            <label>
+              Name
+              <input type="text" name="name" placeholder="Your name" required />
+            </label>
+            <label>
+              Work email
+              <input type="email" name="email" placeholder="you@company.com" required />
+            </label>
+            <label>
+              Fleet size
+              <input type="text" name="fleetSize" placeholder="e.g. 85 units" required />
+            </label>
+            <label class="hp-field" aria-hidden="true">
+              Website
+              <input type="text" name="website" tabindex="-1" autocomplete="off" />
+            </label>
+            <label>
+              Priority
+              <select name="priority">
+                <option value="Fleet review">Fleet review</option>
+                <option value="Acquire units">Acquire units</option>
+                <option value="Sell off units">Sell off units</option>
+                <option value="Need both acquisition and sell-off">Need both acquisition and sell-off</option>
+              </select>
+            </label>
+            <label>
+              What do you need help with?
+              <textarea id="messageField" name="message" rows="4" placeholder="Acquisition planning, unit sell-off, utilization review..." required></textarea>
+            </label>
+            <div class="contact-actions">
+              <button type="submit" class="btn">Request Consultation</button>
+              <button type="button" class="btn btn-secondary" id="emailDraftBtn">Open Email Draft</button>
+            </div>
+            <p class="form-note" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <div class="sticky-cta" id="stickyCta" hidden>
+      <p>Need help deciding what to keep, buy, or sell?</p>
+      <a href="#contact" class="btn btn-sm">Talk to an Advisor</a>
+    </div>
+
+    <button id="backToTop" class="back-to-top" aria-label="Back to top">↑</button>
+
+    <footer class="site-footer">
+      <div class="container footer-wrap">
+        <p>© <span id="year"></span> Fleet Advisory Group</p>
+        <a href="advisor.html">Advisor Dashboard</a>
+        <a href="#main">Back to top</a>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
