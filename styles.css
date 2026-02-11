@@ -115,6 +115,14 @@ input, select, textarea { width: 100%; margin-top: 0.35rem; border: 1px solid #c
 input:focus, select:focus, textarea:focus { outline: 2px solid rgba(22, 99, 255, 0.25); border-color: var(--primary); }
 input.invalid, textarea.invalid { border-color: #d03939; background: #fff5f5; }
 .contact-actions { display: flex; flex-wrap: wrap; gap: 0.7rem; }
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 .form-note { min-height: 1.1rem; color: var(--primary-dark); font-weight: 500; }
 
 .sticky-cta {

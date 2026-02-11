@@ -1,3 +1,28 @@
+const sessionKey = 'fleet_session_id';
+let sessionId = localStorage.getItem(sessionKey);
+if (!sessionId) {
+  sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  localStorage.setItem(sessionKey, sessionId);
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return response;
+}
+
+function trackEvent(eventType, payload = {}) {
+  postJson('/api/events', {
+    eventType,
+    sessionId,
+    page: window.location.pathname,
+    payload,
+  }).catch(() => {});
+}
+
 const menuButton = document.querySelector('.menu-toggle');
 const nav = document.querySelector('.nav');
 
@@ -5,6 +30,7 @@ if (menuButton && nav) {
   menuButton.addEventListener('click', () => {
     const isOpen = nav.classList.toggle('open');
     menuButton.setAttribute('aria-expanded', String(isOpen));
+    trackEvent('menu_toggled', { open: isOpen });
   });
 }
 
@@ -19,6 +45,7 @@ intentButtons.forEach((button) => {
     messageField.focus();
     const contactSection = document.getElementById('contact');
     contactSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    trackEvent('intent_chip_clicked', { intent });
   });
 });
 
@@ -42,17 +69,22 @@ function formatCurrency(value) {
   }).format(value);
 }
 
+function currentEstimator() {
+  const totalUnits = Number(fleetUnits?.value || 0);
+  const idlePercent = Number(idleShare?.value || 0) / 100;
+  const monthlyCost = Number(carryingCost?.value || 0);
+  const idleUnits = Math.round(totalUnits * idlePercent);
+  const annualBurden = idleUnits * monthlyCost * 12;
+  const targetReduction = Math.round(annualBurden * 0.2);
+  return { totalUnits, idlePercent, monthlyCost, idleUnits, annualBurden, targetReduction };
+}
+
 function updateEstimator() {
   if (!fleetUnits || !idleShare || !carryingCost || !fleetUnitsOut || !idleUnitsOut || !annualBurdenOut || !targetReductionOut) {
     return;
   }
 
-  const totalUnits = Number(fleetUnits.value);
-  const idlePercent = Number(idleShare.value) / 100;
-  const monthlyCost = Number(carryingCost.value);
-  const idleUnits = Math.round(totalUnits * idlePercent);
-  const annualBurden = idleUnits * monthlyCost * 12;
-  const targetReduction = Math.round(annualBurden * 0.2);
+  const { totalUnits, idlePercent, monthlyCost, idleUnits, annualBurden, targetReduction } = currentEstimator();
 
   fleetUnitsOut.textContent = String(totalUnits);
   idleUnitsOut.textContent = String(idleUnits);
@@ -71,8 +103,23 @@ function updateEstimator() {
   }
 }
 
+let estimatorTimer;
 [fleetUnits, idleShare, carryingCost].forEach((input) => {
-  input?.addEventListener('input', updateEstimator);
+  input?.addEventListener('input', () => {
+    updateEstimator();
+    clearTimeout(estimatorTimer);
+    estimatorTimer = setTimeout(() => {
+      const est = currentEstimator();
+      postJson('/api/estimator-snapshot', {
+        sessionId,
+        totalUnits: est.totalUnits,
+        idleShare: Math.round(est.idlePercent * 100),
+        carryingCost: est.monthlyCost,
+        annualBurden: est.annualBurden,
+      }).catch(() => {});
+      trackEvent('estimator_updated', { totalUnits: est.totalUnits, idleShare: Math.round(est.idlePercent * 100) });
+    }, 500);
+  });
 });
 updateEstimator();
 
@@ -97,6 +144,7 @@ tabButtons.forEach((button) => {
   button.addEventListener('click', () => {
     const name = button.dataset.scenario || 'before';
     setScenario(name);
+    trackEvent('scenario_changed', { scenario: name });
   });
 });
 
@@ -131,11 +179,13 @@ function renderStory() {
 prevStory?.addEventListener('click', () => {
   storyIndex = (storyIndex - 1 + stories.length) % stories.length;
   renderStory();
+  trackEvent('story_navigated', { direction: 'prev', index: storyIndex });
 });
 
 nextStory?.addEventListener('click', () => {
   storyIndex = (storyIndex + 1) % stories.length;
   renderStory();
+  trackEvent('story_navigated', { direction: 'next', index: storyIndex });
 });
 
 setInterval(() => {
@@ -152,7 +202,7 @@ function markInvalid(input, invalid) {
 }
 
 if (form && formNote) {
-  form.addEventListener('submit', (event) => {
+  form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const nameInput = form.querySelector('input[name="name"]');
     const emailInput = form.querySelector('input[name="email"]');
@@ -182,12 +232,36 @@ if (form && formNote) {
     }
 
     const data = new FormData(form);
-    const name = data.get('name')?.toString().trim() || 'there';
-    const priority = data.get('priority')?.toString() || 'fleet strategy';
-    formNote.textContent = `Thanks, ${name}. We received your ${priority.toLowerCase()} request and will reach out shortly.`;
-    form.reset();
-    fields.forEach((field) => markInvalid(field, false));
-    updateEstimator();
+    const payload = {
+      name: data.get('name')?.toString().trim(),
+      email: data.get('email')?.toString().trim(),
+      fleetSize: data.get('fleetSize')?.toString().trim(),
+      priority: data.get('priority')?.toString().trim(),
+      message: data.get('message')?.toString().trim(),
+      website: data.get('website')?.toString().trim(),
+      sessionId,
+    };
+
+    try {
+      const response = await postJson('/api/leads', payload);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unable to submit request.' }));
+        formNote.textContent = errorData.error || 'Unable to submit request.';
+        trackEvent('lead_submit_failed', { status: response.status });
+        return;
+      }
+
+      const name = payload.name || 'there';
+      const priority = payload.priority || 'fleet strategy';
+      formNote.textContent = `Thanks, ${name}. We received your ${priority.toLowerCase()} request and will reach out shortly.`;
+      form.reset();
+      fields.forEach((field) => markInvalid(field, false));
+      updateEstimator();
+      trackEvent('lead_submitted', { priority });
+    } catch {
+      formNote.textContent = 'Network issue: please retry or use Open Email Draft.';
+      trackEvent('lead_submit_failed', { status: 'network_error' });
+    }
   });
 }
 
@@ -199,6 +273,7 @@ if (emailDraftBtn && form) {
     const fleetSize = form.querySelector('input[name="fleetSize"]')?.value.trim() || 'Not specified';
     const subject = encodeURIComponent(`Fleet Consulting Inquiry: ${priority}`);
     const body = encodeURIComponent(`Hello Fleet Advisory Group,%0D%0A%0D%0AName: ${name}%0D%0AFleet size: ${fleetSize}%0D%0APriority: ${priority}%0D%0A%0D%0AI would like to discuss next steps.%0D%0A`);
+    trackEvent('email_draft_opened', { priority });
     window.location.href = `mailto:consulting@fleetadvisorygroup.com?subject=${subject}&body=${body}`;
   });
 }
@@ -250,5 +325,8 @@ handleScrollEffects();
 if (backToTop) {
   backToTop.addEventListener('click', () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    trackEvent('back_to_top_clicked');
   });
 }
+
+trackEvent('page_view');
