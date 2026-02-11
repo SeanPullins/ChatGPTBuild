@@ -11,15 +11,7 @@ const DATA_DIR = path.join(ROOT, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const MAX_BODY_BYTES = 1024 * 1024;
 const rateLimiter = new Map();
-
 const LEAD_STATUSES = new Set(['new', 'qualified', 'contacted', 'proposal_sent', 'won', 'lost']);
-const ADVISOR_API_KEY = process.env.ADVISOR_API_KEY || 'advisor-dev-key';
-const AUTH_TOKEN_TTL_MS = 1000 * 60 * 60 * 8;
-const advisorSessions = new Map();
-const ADVISOR_USERS = [
-  { id: 'u1', username: process.env.ADVISOR_USERNAME || 'advisor', password: process.env.ADVISOR_PASSWORD || 'advisor123', role: 'advisor' },
-  { id: 'u2', username: process.env.ADMIN_USERNAME || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123', role: 'admin' },
-];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -42,7 +34,6 @@ async function ensureDb() {
       estimatorSnapshots: [],
       crmQueue: [],
       outreachDrafts: [],
-      auditEvents: [],
     };
     await fsp.writeFile(DB_FILE, JSON.stringify(initial, null, 2));
   }
@@ -60,7 +51,6 @@ async function readDb() {
   db.events = Array.isArray(db.events) ? db.events : [];
   db.estimatorSnapshots = Array.isArray(db.estimatorSnapshots) ? db.estimatorSnapshots : [];
   db.outreachDrafts = Array.isArray(db.outreachDrafts) ? db.outreachDrafts : [];
-  db.auditEvents = Array.isArray(db.auditEvents) ? db.auditEvents : [];
 
   let changed = false;
   for (const lead of db.leads) {
@@ -158,78 +148,6 @@ function parseFleetSize(raw) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function extractAdvisorKey(req) {
-  const headerKey = req.headers['x-advisor-key'];
-  if (typeof headerKey === 'string' && headerKey.trim()) {
-    return headerKey.trim();
-  }
-  return '';
-}
-
-function extractBearerToken(req) {
-  const authHeader = req.headers.authorization;
-  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    return authHeader.replace('Bearer ', '').trim();
-  }
-  return '';
-}
-
-function createSession(user) {
-  const token = crypto.randomUUID();
-  const now = Date.now();
-  advisorSessions.set(token, {
-    token,
-    userId: user.id,
-    username: user.username,
-    role: user.role,
-    createdAt: now,
-    expiresAt: now + AUTH_TOKEN_TTL_MS,
-  });
-  return token;
-}
-
-function getSession(token) {
-  if (!token) return null;
-  const session = advisorSessions.get(token);
-  if (!session) return null;
-  if (Date.now() > session.expiresAt) {
-    advisorSessions.delete(token);
-    return null;
-  }
-  return session;
-}
-
-function requireAdvisorAuth(req, res) {
-  const providedKey = extractAdvisorKey(req);
-  if (providedKey && providedKey === ADVISOR_API_KEY) {
-    return { ok: true, authType: 'api_key', role: 'admin', username: 'api-key', userId: 'api-key' };
-  }
-
-  const token = extractBearerToken(req);
-  const session = getSession(token);
-  if (session) {
-    return {
-      ok: true,
-      authType: 'session',
-      role: session.role,
-      username: session.username,
-      userId: session.userId,
-      token,
-    };
-  }
-
-  sendJson(res, 401, { error: 'Unauthorized advisor request.' });
-  return { ok: false };
-}
-
-function requireRole(res, auth, roles) {
-  if (!roles.includes(auth.role)) {
-    sendJson(res, 403, { error: 'Insufficient permissions.' });
-    return false;
-  }
-  return true;
-}
-
 function scoreLead(lead, estimatorSnapshot) {
   let score = 0;
   const reasons = [];
@@ -318,18 +236,6 @@ function createOutreachDraft(lead, recommendation) {
   ].join('\n');
 
   return { subject, body };
-}
-
-function appendAudit(db, actor, action, targetType, targetId, details = {}) {
-  db.auditEvents.push({
-    id: crypto.randomUUID(),
-    actor,
-    action,
-    targetType,
-    targetId,
-    details,
-    createdAt: new Date().toISOString(),
-  });
 }
 
 function validateLead(payload) {
@@ -425,81 +331,9 @@ function dashboardSummary(db) {
   };
 }
 
-function funnelAnalytics(db) {
-  const counts = {
-    new: 0,
-    qualified: 0,
-    contacted: 0,
-    proposal_sent: 0,
-    won: 0,
-    lost: 0,
-  };
-
-  db.leads.forEach((lead) => {
-    if (counts[lead.status] !== undefined) {
-      counts[lead.status] += 1;
-    }
-  });
-
-  const base = db.leads.length || 1;
-  const rates = {
-    qualifiedRate: Number(((counts.qualified / base) * 100).toFixed(2)),
-    contactedRate: Number(((counts.contacted / base) * 100).toFixed(2)),
-    proposalRate: Number(((counts.proposal_sent / base) * 100).toFixed(2)),
-    winRate: Number(((counts.won / base) * 100).toFixed(2)),
-  };
-
-  return { counts, rates, total: db.leads.length };
-}
-
 async function handleApi(req, res) {
   const fullUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const { pathname } = fullUrl;
-
-  if (req.method === 'POST' && pathname === '/api/auth/login') {
-    if (!checkRateLimit(req, 'login', 10, 60_000)) {
-      return sendJson(res, 429, { error: 'Too many login attempts.' });
-    }
-
-    let payload;
-    try {
-      payload = await parseBody(req);
-    } catch (error) {
-      return sendJson(res, 400, { error: error.message });
-    }
-
-    const username = normalizeText(payload.username);
-    const password = normalizeText(payload.password);
-    const user = ADVISOR_USERS.find((u) => u.username === username && u.password === password);
-    if (!user) {
-      return sendJson(res, 401, { error: 'Invalid credentials.' });
-    }
-
-    const token = createSession(user);
-    return sendJson(res, 200, {
-      ok: true,
-      token,
-      user: { id: user.id, username: user.username, role: user.role },
-      expiresInMs: AUTH_TOKEN_TTL_MS,
-    });
-  }
-
-  if (req.method === 'GET' && pathname === '/api/auth/me') {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
-    return sendJson(res, 200, {
-      ok: true,
-      user: { id: auth.userId, username: auth.username, role: auth.role, authType: auth.authType },
-    });
-  }
-
-  if (req.method === 'POST' && pathname === '/api/auth/logout') {
-    const token = extractBearerToken(req);
-    if (token) {
-      advisorSessions.delete(token);
-    }
-    return sendJson(res, 200, { ok: true });
-  }
 
   if (req.method === 'POST' && pathname === '/api/leads') {
     if (!checkRateLimit(req, 'leads', 6, 60_000)) {
@@ -539,10 +373,6 @@ async function handleApi(req, res) {
         grade: checked.lead.grade,
       },
     });
-    appendAudit(db, { type: 'system', username: 'public-form' }, 'lead.created', 'lead', checked.lead.id, {
-      priority: checked.lead.priority,
-      grade: checked.lead.grade,
-    });
     await writeDb(db);
 
     return sendJson(res, 201, {
@@ -554,8 +384,6 @@ async function handleApi(req, res) {
   }
 
   if (req.method === 'GET' && pathname.startsWith('/api/leads/')) {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
     const id = pathname.replace('/api/leads/', '');
     const db = await readDb();
     const lead = db.leads.find((item) => item.id === id);
@@ -566,9 +394,6 @@ async function handleApi(req, res) {
   }
 
   if (req.method === 'PATCH' && pathname.startsWith('/api/leads/')) {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
-
     const parts = pathname.split('/').filter(Boolean);
     if (parts.length !== 4 || parts[3] !== 'status') {
       return sendJson(res, 404, { error: 'Not found' });
@@ -587,46 +412,25 @@ async function handleApi(req, res) {
       return sendJson(res, 400, { error: 'Invalid status value.' });
     }
 
-    if ((status === 'won' || status === 'lost' || status === 'proposal_sent') && !requireRole(res, auth, ['admin'])) {
-      return;
-    }
-
     const db = await readDb();
     const lead = db.leads.find((item) => item.id === id);
     if (!lead) {
       return sendJson(res, 404, { error: 'Lead not found.' });
     }
 
-    const oldStatus = lead.status;
     lead.status = status;
     lead.updatedAt = new Date().toISOString();
-    appendAudit(db, { type: 'user', username: auth.username, role: auth.role }, 'lead.status_changed', 'lead', id, {
-      from: oldStatus,
-      to: status,
-    });
     await writeDb(db);
 
     return sendJson(res, 200, { ok: true, lead });
   }
 
   if (req.method === 'GET' && pathname === '/api/dashboard') {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
-    const statusFilter = normalizeText(fullUrl.searchParams.get('status'));
-    const gradeFilter = normalizeText(fullUrl.searchParams.get('grade')).toUpperCase();
     const db = await readDb();
-    const filteredDb = { ...db };
-    filteredDb.leads = db.leads.filter((lead) => {
-      const statusOk = !statusFilter || lead.status === statusFilter;
-      const gradeOk = !gradeFilter || lead.grade === gradeFilter;
-      return statusOk && gradeOk;
-    });
-    return sendJson(res, 200, dashboardSummary(filteredDb));
+    return sendJson(res, 200, dashboardSummary(db));
   }
 
   if (req.method === 'GET' && pathname.startsWith('/api/recommendations/')) {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
     const leadId = pathname.replace('/api/recommendations/', '');
     const db = await readDb();
     const lead = db.leads.find((item) => item.id === leadId);
@@ -638,8 +442,6 @@ async function handleApi(req, res) {
   }
 
   if (req.method === 'POST' && pathname === '/api/outreach/draft') {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
     let payload;
     try {
       payload = await parseBody(req);
@@ -669,45 +471,11 @@ async function handleApi(req, res) {
     };
 
     db.outreachDrafts.push(saved);
-    appendAudit(db, { type: 'user', username: auth.username, role: auth.role }, 'outreach.draft_created', 'lead', leadId, {
-      draftId: saved.id,
-    });
     await writeDb(db);
     return sendJson(res, 201, { ok: true, draft: saved });
   }
 
-  if (req.method === 'GET' && pathname === '/api/analytics/funnel') {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
-    const statusFilter = normalizeText(fullUrl.searchParams.get('status'));
-    const gradeFilter = normalizeText(fullUrl.searchParams.get('grade')).toUpperCase();
-    const db = await readDb();
-    const filteredDb = { ...db };
-    filteredDb.leads = db.leads.filter((lead) => {
-      const statusOk = !statusFilter || lead.status === statusFilter;
-      const gradeOk = !gradeFilter || lead.grade === gradeFilter;
-      return statusOk && gradeOk;
-    });
-    return sendJson(res, 200, funnelAnalytics(filteredDb));
-  }
-
-  if (req.method === 'GET' && pathname === '/api/audit') {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
-    const limit = Math.min(Number(fullUrl.searchParams.get('limit') || 25), 100);
-    const db = await readDb();
-    const events = db.auditEvents
-      .slice()
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, limit);
-    return sendJson(res, 200, { events });
-  }
-
   if (req.method === 'POST' && pathname === '/api/crm-sync/mock') {
-    const auth = requireAdvisorAuth(req, res);
-    if (!auth.ok) return;
-    if (!requireRole(res, auth, ['admin'])) return;
-
     const db = await readDb();
     let synced = 0;
     const now = new Date().toISOString();
@@ -717,7 +485,6 @@ async function handleApi(req, res) {
         synced += 1;
       }
     }
-    appendAudit(db, { type: 'user', username: auth.username, role: auth.role }, 'crm.sync_mock', 'crmQueue', 'all', { synced });
     await writeDb(db);
     return sendJson(res, 200, { ok: true, synced });
   }
@@ -821,7 +588,7 @@ async function start() {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-advisor-key',
+        'Access-Control-Allow-Headers': 'Content-Type',
       });
       return res.end();
     }
