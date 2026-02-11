@@ -32,6 +32,7 @@ const targetReductionOut = document.getElementById('targetReductionOut');
 const fleetUnitsLabel = document.getElementById('fleetUnitsLabel');
 const idleShareLabel = document.getElementById('idleShareLabel');
 const carryingCostLabel = document.getElementById('carryingCostLabel');
+const savingsBadge = document.getElementById('savingsBadge');
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('en-US', {
@@ -61,12 +62,87 @@ function updateEstimator() {
   if (fleetUnitsLabel) fleetUnitsLabel.textContent = String(totalUnits);
   if (idleShareLabel) idleShareLabel.textContent = `${Math.round(idlePercent * 100)}%`;
   if (carryingCostLabel) carryingCostLabel.textContent = formatCurrency(monthlyCost);
+
+  if (savingsBadge) {
+    savingsBadge.textContent =
+      targetReduction > 100000
+        ? 'High-impact opportunity: optimization target exceeds $100K/yr.'
+        : 'Moderate-impact opportunity: optimization target identified.';
+  }
 }
 
 [fleetUnits, idleShare, carryingCost].forEach((input) => {
   input?.addEventListener('input', updateEstimator);
 });
 updateEstimator();
+
+const tabButtons = document.querySelectorAll('.tab-btn');
+const scenarioPanels = document.querySelectorAll('.scenario-panel');
+
+function setScenario(name) {
+  tabButtons.forEach((button) => {
+    const active = button.dataset.scenario === name;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+
+  scenarioPanels.forEach((panel) => {
+    const active = panel.id === `${name}Panel`;
+    panel.classList.toggle('active', active);
+    panel.hidden = !active;
+  });
+}
+
+tabButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    const name = button.dataset.scenario || 'before';
+    setScenario(name);
+  });
+});
+
+const stories = [
+  {
+    quote: '“We cut idle units by 17% in two quarters and redirected capital into better-fit equipment.”',
+    meta: 'Regional Service Fleet · 140 units',
+  },
+  {
+    quote: '“The acquisition short list prevented overbuying and gave finance a cleaner ROI narrative.”',
+    meta: 'Industrial Contractor · 92 units',
+  },
+  {
+    quote: '“Our divestment sequence improved recovery value and reduced disposal delays dramatically.”',
+    meta: 'Distribution Operator · 210 units',
+  },
+];
+
+let storyIndex = 0;
+const storyQuote = document.getElementById('storyQuote');
+const storyMeta = document.getElementById('storyMeta');
+const prevStory = document.getElementById('prevStory');
+const nextStory = document.getElementById('nextStory');
+
+function renderStory() {
+  if (!storyQuote || !storyMeta) return;
+  const current = stories[storyIndex];
+  storyQuote.textContent = current.quote;
+  storyMeta.innerHTML = `<strong>${current.meta.split(' · ')[0]}</strong> · ${current.meta.split(' · ')[1]}`;
+}
+
+prevStory?.addEventListener('click', () => {
+  storyIndex = (storyIndex - 1 + stories.length) % stories.length;
+  renderStory();
+});
+
+nextStory?.addEventListener('click', () => {
+  storyIndex = (storyIndex + 1) % stories.length;
+  renderStory();
+});
+
+setInterval(() => {
+  storyIndex = (storyIndex + 1) % stories.length;
+  renderStory();
+}, 6000);
+renderStory();
 
 const form = document.querySelector('.contact-form');
 const formNote = document.querySelector('.form-note');
@@ -134,6 +210,7 @@ if (year) {
 
 const backToTop = document.getElementById('backToTop');
 const progress = document.getElementById('scrollProgress');
+const stickyCta = document.getElementById('stickyCta');
 const navLinks = document.querySelectorAll('.nav a[href^="#"]');
 const sections = document.querySelectorAll('main section[id]');
 
@@ -148,6 +225,11 @@ function handleScrollEffects() {
 
   if (backToTop) {
     backToTop.classList.toggle('visible', scrollTop > 420);
+  }
+
+  if (stickyCta) {
+    const show = scrollTop > 520;
+    stickyCta.hidden = !show;
   }
 
   let current = '';
