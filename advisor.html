@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Oakleaf Auto Consulting | Advisor Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="section">
+      <div class="container">
+        <h1>Advisor Dashboard (Sprint 6)</h1>
+        <p class="section-intro">Secure advisor login, RBAC-sensitive actions, filtered analytics, audit trail, and outreach workflow.</p>
+
+        <div class="card" style="margin-bottom: 1rem;">
+          <div class="dashboard-row">
+            <p id="authState" class="note">Not signed in.</p>
+            <button id="logoutBtn" class="btn btn-secondary btn-sm" type="button">Sign Out</button>
+          </div>
+          <form id="loginForm" class="auth-form">
+            <label>
+              Username
+              <input id="loginUsername" type="text" placeholder="advisor" />
+            </label>
+            <label>
+              Password
+              <input id="loginPassword" type="password" placeholder="••••••••" />
+            </label>
+            <button id="loginBtn" class="btn btn-sm" type="submit">Sign In</button>
+          </form>
+        </div>
+
+        <div class="card" style="margin-bottom: 1rem;">
+          <div class="dashboard-row">
+            <h2>Filters</h2>
+            <div class="dashboard-row">
+              <button id="applyFiltersBtn" class="btn btn-sm" type="button">Apply Filters</button>
+              <button id="presetHotBtn" class="btn btn-secondary btn-sm" type="button">Hot A Leads</button>
+              <button id="presetProposalBtn" class="btn btn-secondary btn-sm" type="button">Proposal Pipeline</button>
+              <button id="presetResetBtn" class="btn btn-secondary btn-sm" type="button">Reset</button>
+            </div>
+          </div>
+          <div class="grid cards-3">
+            <label>
+              Status
+              <select id="statusFilter">
+                <option value="">All</option>
+                <option value="new">new</option>
+                <option value="qualified">qualified</option>
+                <option value="contacted">contacted</option>
+                <option value="proposal_sent">proposal_sent</option>
+                <option value="won">won</option>
+                <option value="lost">lost</option>
+              </select>
+            </label>
+            <label>
+              Grade
+              <select id="gradeFilter">
+                <option value="">All</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+              </select>
+            </label>
+            <div></div>
+          </div>
+        </div>
+
+        <div class="grid cards-3">
+          <article class="card"><h3>Total Leads</h3><p id="metricLeads">0</p></article>
+          <article class="card"><h3>Average Score</h3><p id="metricScore">0</p></article>
+          <article class="card"><h3>Pending CRM Sync</h3><p id="metricQueue">0</p></article>
+        </div>
+
+        <div class="grid cards-3" style="margin-top: 1rem;">
+          <article class="card"><h3>Qualified Rate</h3><p id="metricQualifiedRate">0%</p></article>
+          <article class="card"><h3>Proposal Rate</h3><p id="metricProposalRate">0%</p></article>
+          <article class="card"><h3>Win Rate</h3><p id="metricWinRate">0%</p></article>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <h2>Status Breakdown</h2>
+          <ul id="statusList"></ul>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <h2>Top Priorities</h2>
+          <ul id="priorityList"></ul>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <div class="dashboard-row">
+            <h2>Recent Leads</h2>
+            <button id="syncBtn" class="btn btn-sm" type="button">Run Mock CRM Sync (admin only)</button>
+          </div>
+          <div class="table-wrap">
+            <table class="lead-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Priority</th>
+                  <th>Score</th>
+                  <th>Grade</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="leadRows"></tbody>
+            </table>
+          </div>
+          <p class="form-note" id="syncNote" aria-live="polite"></p>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <h2>Recent Activity</h2>
+          <ul id="auditList"></ul>
+        </div>
+
+        <div class="card section" style="margin-top: 1rem;">
+          <h2>Lead Intelligence Panel</h2>
+          <p class="section-intro">Select a lead to view recommendations and generate outreach drafts.</p>
+          <div id="intelPanel" class="intel-panel">
+            <p class="note">No lead selected.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+    <script src="advisor.js"></script>
+  </body>
+</html>

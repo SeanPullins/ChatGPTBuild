@@ -1,0 +1,10 @@
+{
+  "name": "fleet-advisory-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fleet advisory landing page with Sprint 1 backend APIs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
